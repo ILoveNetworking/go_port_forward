@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -18,17 +19,19 @@ func parse_args() []string {
 	return arguments
 }
 
-func handle_client(conn net.Conn) {
+func handle_client(conn net.Conn, remote_host string) {
 	for {
-		buffer := make([]byte, 1024)
-		_, err := conn.Read(buffer)
+		defer conn.Close()
+		// Create connection to the remote host
+		remote, err := net.Dial("tcp", remote_host)
+		defer remote.Close()
 		if err != nil {
-			continue
+			log.Fatal(err)
 		}
-		fmt.Println(string(buffer))
+		// Using io.Copy to copy data from server to client and vice versa
+		go func() { io.Copy(conn, remote) }()
+		go func() { io.Copy(remote, conn) }()
 
-		// Send response back
-		conn.Write([]byte("<h1>Hello world</h1>"))
 	}
 }
 
@@ -39,6 +42,7 @@ func main() {
 	fmt.Printf("[+] Starting server at: %s\n", local_host)
 	// Starting listener
 	server, err := net.Listen("tcp", local_host)
+	defer server.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -49,6 +53,6 @@ func main() {
 			continue
 		}
 		fmt.Printf("[+] Connection from: %s -> %s\n", conn.LocalAddr().String(), remote_host)
-		go handle_client(conn)
+		go handle_client(conn, remote_host)
 	}
 }
